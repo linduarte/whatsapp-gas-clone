@@ -1,4 +1,3 @@
-# app/services/excel_service.py
 import pandas as pd
 import io
 
@@ -51,7 +50,7 @@ class ExcelService:
                         "leitura_atual": self._safe_float_convert(row.get("Leitura atual", 0)),
                         "consumo_m3": self._safe_float_convert(row.get("Consumo(m³)", 0)),
                         "calculo": self._safe_float_convert(row.get("Cálculo", 0)),
-                        "valor_final_rs": self._safe_float_convert(row.get("Valor final(R$)", 0))
+                        "valor_final_rs": round(self._safe_float_convert(row.get("Valor final(R$)", 0)), 2)
                     }
                     gas_data.append(item)
                     

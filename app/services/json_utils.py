@@ -1,5 +1,3 @@
-# json_utils.py
-
 import pandas as pd
 import json
 
@@ -53,7 +51,7 @@ async def format_message_with_styles(data, target_date):
     # Clean the entire message to ensure no problematic characters remain
     clean_message = message.encode('ascii', 'ignore').decode('ascii')
     
-    print(f"Formatted message with WhatsApp styling:")
+    print("Formatted message with WhatsApp styling:")
     print(f"Original message length: {len(message)}")
     print(f"Cleaned message length: {len(clean_message)}")
     print(f"Preview: {clean_message[:200]}...")
