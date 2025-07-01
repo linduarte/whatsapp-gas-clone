@@ -79,6 +79,11 @@ if page == "📊 Upload Data":
                     
                     # Show preview
                     df = pd.DataFrame([item for item in st.session_state.gas_data['data']])
+                    
+                    # Format currency columns to show 2 decimal places
+                    if 'valor_final_rs' in df.columns:
+                        df['valor_final_rs'] = df['valor_final_rs'].apply(lambda x: f"{float(x):.2f}")
+                    
                     st.dataframe(df, use_container_width=True)
                 else:
                     st.error(f"❌ Error: {response.text}")
@@ -95,8 +100,13 @@ elif page == "👀 Preview Data":
         # Convert data to DataFrame
         df = pd.DataFrame([item for item in data['data']])
         
+        # Format currency columns to show 2 decimal places
+        df_display = df.copy()
+        if 'valor_final_rs' in df_display.columns:
+            df_display['valor_final_rs'] = df_display['valor_final_rs'].apply(lambda x: f"{float(x):.2f}")
+        
         # Display data
-        st.dataframe(df, use_container_width=True)
+        st.dataframe(df_display, use_container_width=True)
         
         # Summary statistics
         st.subheader("📈 Summary")
