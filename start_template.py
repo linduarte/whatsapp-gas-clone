@@ -41,15 +41,18 @@ class ServiceLauncher:
                 fastapi_cmd.append("--reload")
             
             # Start FastAPI
+            # pyrefly: ignore  # implicitly-defined-attribute, no-matching-overload
             self.api_process = subprocess.Popen(fastapi_cmd)
             print(f"✅ FastAPI started on http://localhost:{self.config['fastapi_port']}")
             
             # Wait for FastAPI to initialize
+            # pyrefly: ignore  # bad-argument-type
             time.sleep(self.config['startup_delay'])
             
             print(f"🎨 Starting Streamlit from {self.config['streamlit_file']}...")
             
             # Start Streamlit
+            # pyrefly: ignore  # implicitly-defined-attribute, no-matching-overload
             self.frontend_process = subprocess.Popen([
                 sys.executable, "-m", "streamlit", "run",
                 self.config['streamlit_file'],

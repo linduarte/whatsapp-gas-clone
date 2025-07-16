@@ -2,6 +2,7 @@ import pandas as pd
 import io
 
 class ExcelService:
+    # pyrefly: ignore  # bad-function-definition
     def process_excel_content(self, content: bytes, filename: str, target_month: str = None):
         """Process Excel file content and return formatted data
         
@@ -32,6 +33,7 @@ class ExcelService:
             gas_data = []
             target_date = None
             
+            # pyrefly: ignore  # bad-assignment
             for index, row in formatted_df.iterrows():
                 try:
                     # Skip rows that might be headers or invalid data
@@ -116,6 +118,7 @@ class ExcelService:
                 df["Data Leitura"] = pd.to_datetime(
                     df["Data Leitura"], format="%d/%m/%Y", errors="coerce"
                 )
+                # pyrefly: ignore  # missing-attribute
                 df["Data Leitura"] = df["Data Leitura"].apply(
                     lambda x: x.strftime("%d/%m/%Y") if pd.notnull(x) else ""
                 )
@@ -175,7 +178,9 @@ class ExcelService:
             
             # Filter by month and year
             mask = (
+                # pyrefly: ignore  # missing-attribute
                 (filtered_df["Data_Leitura_Date"].dt.month == int(month)) &
+                # pyrefly: ignore  # missing-attribute
                 (filtered_df["Data_Leitura_Date"].dt.year == int(year))
             )
             

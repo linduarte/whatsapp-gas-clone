@@ -170,6 +170,7 @@ async def upload_excel(
             print(f"Filtering for month: {target_month}")
         
         # Check file type
+        # pyrefly: ignore  # missing-attribute
         if not file.filename.endswith(('.xlsx', '.xls')):
             raise HTTPException(status_code=400, detail="Only Excel files (.xlsx, .xls) are allowed")
         
@@ -178,8 +179,10 @@ async def upload_excel(
         
         # Process with ExcelService
         excel_service = ExcelService()
+        # pyrefly: ignore  # bad-argument-type
         result = excel_service.process_excel_content(contents, file.filename, target_month)
         
+        # pyrefly: ignore  # bad-argument-type
         print(f"Excel processed successfully. Data entries: {len(result.get('data', []))}")
         
         return result
@@ -249,6 +252,7 @@ async def get_available_months(file: UploadFile = File(...)):
         print(f"Getting available months from: {file.filename}")
         
         # Check file type
+        # pyrefly: ignore  # missing-attribute
         if not file.filename.endswith(('.xlsx', '.xls')):
             raise HTTPException(status_code=400, detail="Only Excel files (.xlsx, .xls) are allowed")
         
@@ -257,11 +261,14 @@ async def get_available_months(file: UploadFile = File(...)):
         
         # Process with ExcelService to get all data
         excel_service = ExcelService()
+        # pyrefly: ignore  # bad-argument-type
         result = excel_service.process_excel_content(contents, file.filename, target_month=None)
         
         # Extract unique months from the data
         available_months = set()
+        # pyrefly: ignore  # not-iterable
         for item in result.get('data', []):
+            # pyrefly: ignore  # missing-attribute
             data_leitura = item.get('data_leitura', '')
             if data_leitura and '/' in data_leitura:
                 try:
@@ -280,6 +287,7 @@ async def get_available_months(file: UploadFile = File(...)):
         return {
             "status": "success",
             "available_months": months_list,
+            # pyrefly: ignore  # bad-argument-type
             "total_records": len(result.get('data', []))
         }
         
