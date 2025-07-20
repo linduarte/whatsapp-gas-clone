@@ -6,7 +6,7 @@ from app.api import routes
 app = FastAPI(
     title="WhatsApp Gas Consumption API",
     description="API for managing gas consumption data and WhatsApp automation",
-    version="1.0.0"
+    version="1.0.0",
 )
 
 app.add_middleware(
@@ -19,6 +19,7 @@ app.add_middleware(
 )
 
 app.include_router(routes.router, prefix="/api/v1")
+
 
 @app.get("/")
 async def root():
