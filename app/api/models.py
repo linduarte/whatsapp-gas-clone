@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 # from datetime import datetime
 
+
 class GasConsumptionData(BaseModel):
     data_leitura: str
     apartamento: str
@@ -11,13 +12,16 @@ class GasConsumptionData(BaseModel):
     calculo: float
     valor_final_rs: float
 
+
 class GasConsumptionResponse(BaseModel):
     target_date: Optional[str]
     data: List[GasConsumptionData]
 
+
 class WhatsAppMessage(BaseModel):
     phone_number: str
     message: str
+
 
 class WhatsAppResponse(BaseModel):
     status: str
