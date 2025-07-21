@@ -75,7 +75,23 @@ async def format_message_with_styles(data, target_date):
         message += f"{'─' * 25}\n\n"
     message += f"_Relatorio gerado em {target_date}_\n"
     message += f"_Total de apartamentos: {len(data)}_"
-    clean_message = message.encode("ascii", "ignore").decode("ascii")
+    # Remove emojis, mas mantenha acentuação
+    import re
+    def remove_emojis(text):
+        emoji_pattern = re.compile(
+            "["
+            u"\U0001F600-\U0001F64F"  # emoticons
+            u"\U0001F300-\U0001F5FF"  # symbols & pictographs
+            u"\U0001F680-\U0001F6FF"  # transport & map symbols
+            u"\U0001F1E0-\U0001F1FF"  # flags (iOS)
+            u"\U00002700-\U000027BF"  # Dingbats
+            u"\U000024C2-\U0001F251" 
+            "]+",
+            flags=re.UNICODE
+        )
+        return emoji_pattern.sub(r"", text)
+
+    clean_message = remove_emojis(message)
     print("Formatted message with WhatsApp styling:")
     print(f"Original message length: {len(message)}")
     print(f"Cleaned message length: {len(clean_message)}")
