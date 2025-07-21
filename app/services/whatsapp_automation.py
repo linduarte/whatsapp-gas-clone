@@ -200,7 +200,7 @@ async def send_message_to_input(driver, message, delay=1):
 
 async def send_test_message(phone_number, stop_event):
     """Send a simple test message via WhatsApp"""
-    message = "🧪 This is a test message from the gas consumption system!"
+    message = "Esta é uma mensagem automática do sistema de consumo de gas."
     driver = None
 
     try:
