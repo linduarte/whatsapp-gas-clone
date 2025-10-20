@@ -5,6 +5,8 @@ import time
 
 
 def start_services():
+    api_process = None
+    frontend_process = None
     try:
         # Start FastAPI
         api_process = subprocess.Popen(
@@ -43,8 +45,15 @@ def start_services():
 
     except KeyboardInterrupt:
         print("\n🛑 Shutting down services...")
-        api_process.terminate()
-        frontend_process.terminate()
+    finally:
+        # Terminate any started subprocesses
+        for proc in (api_process, frontend_process):
+            if proc is not None:
+                try:
+                    if proc.poll() is None:
+                        proc.terminate()
+                except Exception:
+                    pass
 
 
 if __name__ == "__main__":
