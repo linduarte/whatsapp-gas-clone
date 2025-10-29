@@ -1,4 +1,10 @@
 # app/main.py
+
+"""
+Main entry point for the WhatsApp Gas Consumption API (FastAPI).
+"""
+from typing import Dict
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api import routes
@@ -22,5 +28,5 @@ app.include_router(routes.router, prefix="/api/v1")
 
 
 @app.get("/")
-async def root():
+async def root() -> Dict[str, str]:
     return {"message": "WhatsApp Gas Consumption API is running!"}
