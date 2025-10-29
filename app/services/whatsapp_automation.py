@@ -1,4 +1,5 @@
 # app/services/whatsapp_automation.py - CORRECTED VERSION
+
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
@@ -9,8 +10,11 @@ import asyncio
 import os
 from datetime import datetime
 
+from typing import Optional
+from multiprocessing.synchronize import Event as MpEvent
 
-def get_dynamic_chrome_profile_path():
+
+def get_dynamic_chrome_profile_path() -> Optional[str]:
     """Get the Chrome profile path for the current user dynamically."""
     username = os.getenv("USERNAME")
     if not username:
@@ -26,7 +30,7 @@ def get_dynamic_chrome_profile_path():
     return None
 
 
-def create_chrome_driver():
+def create_chrome_driver() -> webdriver.Chrome:
     """Create Chrome WebDriver with robust configuration and fallback."""
     options = webdriver.ChromeOptions()
     profile_path = get_dynamic_chrome_profile_path()
@@ -66,9 +70,7 @@ def create_chrome_driver():
                 options.add_argument("--no-sandbox")
                 options.add_argument("--disable-dev-shm-usage")
                 options.add_argument("--disable-blink-features=AutomationControlled")
-                options.add_experimental_option(
-                    "excludeSwitches", ["enable-automation"]
-                )
+                options.add_experimental_option("excludeSwitches", ["enable-automation"])
                 options.add_experimental_option("useAutomationExtension", False)
                 driver = webdriver.Chrome(options=options)
                 print("✅ Chrome driver created with fresh profile")
@@ -82,12 +84,11 @@ def create_chrome_driver():
     except Exception as e:
         print(f"❌ Unexpected error creating Chrome driver: {e}")
         import traceback
-
         traceback.print_exc()
         raise
 
 
-async def wait_for_whatsapp_load(driver, timeout=60):
+async def wait_for_whatsapp_load(driver: webdriver.Chrome, timeout: int = 60) -> None:
     """Wait for WhatsApp Web to load properly"""
     try:
         print("⏳ Waiting for WhatsApp Web to load...")
@@ -124,7 +125,7 @@ async def wait_for_whatsapp_load(driver, timeout=60):
         raise
 
 
-async def open_chat(driver, phone_number, message):
+async def open_chat(driver: webdriver.Chrome, phone_number: str, message: str) -> None:
     """Open chat with the specified phone number and send a message"""
     try:
         print(f"📱 Opening chat with: {phone_number}")
@@ -156,7 +157,7 @@ async def open_chat(driver, phone_number, message):
         raise
 
 
-async def send_message_to_input(driver, message, delay=1):
+async def send_message_to_input(driver: webdriver.Chrome, message: str, delay: int = 1) -> None:
     """Send message to WhatsApp input box with proper formatting"""
     try:
         print(f"Sending message: {repr(message)}")
@@ -198,7 +199,7 @@ async def send_message_to_input(driver, message, delay=1):
         raise
 
 
-async def send_test_message(phone_number, stop_event):
+async def send_test_message(phone_number: str, stop_event: MpEvent) -> None:
     """Send a simple test message via WhatsApp"""
     message = "Esta é uma mensagem automática do sistema de consumo de gas."
     driver = None
@@ -234,7 +235,7 @@ async def send_test_message(phone_number, stop_event):
                 traceback.print_exc()
 
 
-async def send_whatsapp_with_greeting(phone_number, message, stop_event):
+async def send_whatsapp_with_greeting(phone_number: str, message: str, stop_event: MpEvent) -> None:
     """
     Enhanced WhatsApp automation with greeting, menu selection, and message sending
     """
@@ -294,7 +295,7 @@ async def send_whatsapp_with_greeting(phone_number, message, stop_event):
                 print(f"[ERROR] Error closing browser: {e}")
 
 
-async def send_simple_test_message(phone_number, message):
+async def send_simple_test_message(phone_number: str, message: str) -> None:
     """Send a simple test message without greeting sequence"""
     driver = None
 
@@ -338,7 +339,7 @@ async def send_simple_test_message(phone_number, message):
                 print(f"[ERROR] Error closing browser: {e}")
 
 
-def run_send_simple_test_message(phone_number, message, stop_event):
+def run_send_simple_test_message(phone_number: str, message: str, stop_event: MpEvent) -> None:
     """Sync wrapper for simple test message"""
     try:
         print(f"🔄 Starting subprocess for simple test message to {phone_number}")
@@ -359,7 +360,7 @@ def run_send_simple_test_message(phone_number, message, stop_event):
         raise  # Re-raise to ensure proper exit code
 
 
-def run_send_test_message(phone_number, stop_event):
+def run_send_test_message(phone_number: str, stop_event: MpEvent) -> None:
     """Sync wrapper for test message"""
     try:
         asyncio.run(send_test_message(phone_number, stop_event))
@@ -369,7 +370,7 @@ def run_send_test_message(phone_number, stop_event):
         print(f"❌ Test failed: {e}")
 
 
-def run_send_whatsapp_with_greeting(phone_number, message, stop_event):
+def run_send_whatsapp_with_greeting(phone_number: str, message: str, stop_event: MpEvent) -> None:
     """Sync wrapper for WhatsApp automation with greeting"""
     try:
         asyncio.run(send_whatsapp_with_greeting(phone_number, message, stop_event))
@@ -404,3 +405,9 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("\n🛑 Automation stopped")
         stop_event.set()
+    except Exception as e:
+        match e:
+            case ValueError() as ve:
+                print(f"Value error in main: {ve}")
+            case _:
+                print(f"Error in main: {e}")

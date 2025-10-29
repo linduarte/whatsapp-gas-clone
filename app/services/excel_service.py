@@ -5,8 +5,10 @@ from typing import Optional
 
 
 
+
+
 class ExcelService:
-    def process_excel_content(self, content: bytes, filename: str, target_month: Optional[str] = None):
+    def process_excel_content(self, content: bytes, filename: str, target_month: Optional[str] = None) -> dict:
         """
         Process Excel file content and return formatted data.
 
@@ -64,7 +66,11 @@ class ExcelService:
             return {"target_date": target_date or "Data desconhecida", "data": gas_data}
 
         except Exception as e:
-            raise Exception(f"Error processing Excel file: {e}")
+            match e:
+                case ValueError() as ve:
+                    raise Exception(f"Value error processing Excel file: {ve}")
+                case _:
+                    raise Exception(f"Error processing Excel file: {e}")
 
     def _safe_float_convert(self, value) -> float:
         """
@@ -88,7 +94,7 @@ class ExcelService:
         # For any other type, return 0.0 to ensure float return type
         return 0.0
 
-    def _format_dataframe(self, df):
+    def _format_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Format dataframe with proper data types and column handling.
         """
@@ -123,7 +129,7 @@ class ExcelService:
                     df[col] = 0
         return df
 
-    def _filter_by_month(self, df, target_month):
+    def _filter_by_month(self, df: pd.DataFrame, target_month: str) -> pd.DataFrame:
         """
         Filter dataframe by specific month.
 
@@ -172,5 +178,9 @@ class ExcelService:
                 print(f"No data found for {month}/{year}. Available dates: {list(available_dates)[:10]}...")
             return result_df
         except Exception as e:
-            print(f"Error filtering by month: {e}")
+            match e:
+                case ValueError() as ve:
+                    print(f"Value error filtering by month: {ve}")
+                case _:
+                    print(f"Error filtering by month: {e}")
             return df

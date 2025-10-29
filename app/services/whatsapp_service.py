@@ -2,8 +2,10 @@
 from multiprocessing import Process, Event
 
 
+from typing import Any
+
 class WhatsAppService:
-    async def send_message(self, phone_number: str, message: str):
+    async def send_message(self, phone_number: str, message: str) -> dict[str, Any]:
         """FastAPI wrapper for full WhatsApp automation with greeting"""
         try:
             # Clean the message to prevent emoji encoding issues
@@ -35,11 +37,14 @@ class WhatsAppService:
         except Exception as e:
             print(f"Error in send_message: {str(e)}")
             import traceback
-
             traceback.print_exc()
-            raise Exception(f"Failed to send WhatsApp: {str(e)}")
+            match e:
+                case ValueError() as ve:
+                    raise Exception(f"Failed to send WhatsApp (value error): {ve}")
+                case _:
+                    raise Exception(f"Failed to send WhatsApp: {str(e)}")
 
-    async def send_test_message(self, phone_number: str, message: str):
+    async def send_test_message(self, phone_number: str, message: str) -> dict[str, Any]:
         """FastAPI wrapper for simple test message (no greeting sequence)"""
         try:
             print(f"Starting test message for {phone_number}")
@@ -64,6 +69,9 @@ class WhatsAppService:
         except Exception as e:
             print(f"Error in send_test_message: {str(e)}")
             import traceback
-
             traceback.print_exc()
-            raise Exception(f"Failed to send test WhatsApp: {str(e)}")
+            match e:
+                case ValueError() as ve:
+                    raise Exception(f"Failed to send test WhatsApp (value error): {ve}")
+                case _:
+                    raise Exception(f"Failed to send test WhatsApp: {str(e)}")

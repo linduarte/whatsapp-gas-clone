@@ -2,9 +2,16 @@ import pandas as pd
 import json
 
 
+
+
 async def extract_gas_data(
-    file_path, date_column, apt_column, last_lecture_column, value_column, target_date
-):
+    file_path: str,
+    date_column: str,
+    apt_column: str,
+    last_lecture_column: str,
+    value_column: str,
+    target_date: str
+) -> pd.DataFrame:
     try:
         with open(file_path, "r", encoding="utf-8") as file:
             data = json.load(file)
@@ -18,10 +25,15 @@ async def extract_gas_data(
         return df
     except Exception as e:
         print(f"Error reading JSON file: {e}")
+        match e:
+            case ValueError() as ve:
+                print(f"Value error reading JSON: {ve}")
+            case _:
+                print(f"Other error reading JSON: {e}")
         return pd.DataFrame()  # Return an empty DataFrame on error
 
 
-async def format_message_with_styles(data, target_date):
+async def format_message_with_styles(data: pd.DataFrame, target_date: str) -> str:
     # Print columns for debugging
     print(f"DataFrame columns: {list(data.columns)}")
     # Normalize column names (strip, lower, replace spaces with underscores)
@@ -77,7 +89,7 @@ async def format_message_with_styles(data, target_date):
     message += f"_Total de apartamentos: {len(data)}_"
     # Remove emojis, mas mantenha acentuação
     import re
-    def remove_emojis(text):
+    def remove_emojis(text: str) -> str:
         emoji_pattern = re.compile(
             "["
             u"\U0001F600-\U0001F64F"  # emoticons
