@@ -1,6 +1,10 @@
-# app/api/routes.py
+
+"""
+API routes for WhatsApp Gas Consumption FastAPI backend.
+"""
 from fastapi import APIRouter, HTTPException, Query, UploadFile, File
 from pydantic import BaseModel
+from typing import Any, Dict
 import json
 import os
 import pandas as pd
@@ -13,17 +17,19 @@ router = APIRouter()
 
 # Data models for API requests
 class WhatsAppRequest(BaseModel):
+    """Request model for sending a WhatsApp message."""
     phone_number: str
     message: str
 
 
 class MessageFormatRequest(BaseModel):
+    """Request model for formatting a WhatsApp message from data."""
     target_date: str
     data: list
 
 
 @router.get("/health")
-async def health_check():
+async def health_check() -> Dict[str, str]:
     return {"status": "healthy", "service": "WhatsApp Gas API"}
 
 
@@ -35,7 +41,7 @@ async def test_whatsapp_simple(
     message: str = Query(
         default="Test message from FastAPI - No emojis!", description="Test message"
     ),
-):
+) -> Dict[str, Any]:
     """
     Simple WhatsApp test - sends a basic message to test the automation
     """
@@ -72,7 +78,7 @@ async def test_main_json_from_existing(
     phone_number: str = Query(
         default="+5531988292853", description="Your phone number"
     ),
-):
+) -> Dict[str, Any]:
     """
     Test using your existing output.json file with full WhatsApp automation
     """
@@ -181,7 +187,7 @@ async def upload_excel(
     target_month: str = Query(
         None, description="Filter by month (e.g., '01/2025', '02/2025')"
     ),
-):
+) -> Dict[str, Any]:
     """
     Upload and process Excel file for gas consumption data.
     Optionally filter by specific month.
@@ -224,7 +230,7 @@ async def upload_excel(
 
 
 @router.post("/format-message")
-async def format_message(request: MessageFormatRequest):
+async def format_message(request: MessageFormatRequest) -> Dict[str, Any]:
     """
     Format gas consumption data into WhatsApp message
     """
@@ -250,7 +256,7 @@ async def format_message(request: MessageFormatRequest):
 
 
 @router.post("/send-whatsapp")
-async def send_whatsapp(request: WhatsAppRequest):
+async def send_whatsapp(request: WhatsAppRequest) -> Dict[str, Any]:
     """
     Send WhatsApp message
     """
@@ -282,7 +288,7 @@ async def send_whatsapp(request: WhatsAppRequest):
 
 
 @router.post("/get-available-months")
-async def get_available_months(file: UploadFile = File(...)):
+async def get_available_months(file: UploadFile = File(...)) -> Dict[str, Any]:
     """
     Get list of available months from Excel file
     """
