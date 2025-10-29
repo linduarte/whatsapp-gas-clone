@@ -1,19 +1,21 @@
 # start_template.py - Generic FastAPI + Streamlit Launcher
+
 import subprocess
 import sys
 import time
+from typing import Optional, Dict, Any
+
 
 
 class ServiceLauncher:
-    def __init__(self, config=None):
+    def __init__(self, config: Optional[Dict[str, Any]] = None) -> None:
         """
-        Generic launcher for FastAPI + Streamlit applications
+        Generic launcher for FastAPI + Streamlit applications.
 
         Args:
-            config (dict): Configuration options
+            config: Optional dictionary of configuration options.
         """
-        # Default configuration
-        self.config = {
+        self.config: Dict[str, Any] = {
             "fastapi_module": "app.main:app",
             "fastapi_port": 8000,
             "streamlit_file": "frontend/streamlit_app.py",
@@ -21,19 +23,20 @@ class ServiceLauncher:
             "startup_delay": 3,
             "auto_reload": True,
         }
-
-        # Update with custom config
         if config:
             self.config.update(config)
 
-    def start_services(self):
-        """Start both FastAPI and Streamlit services"""
-        try:
-            print(
-                f"🚀 Starting {self.config['fastapi_module']} on port {self.config['fastapi_port']}..."
-            )
 
-            # Build FastAPI command
+    def start_services(self) -> None:
+        """
+        Start both FastAPI and Streamlit services as subprocesses.
+        Handles graceful shutdown and error reporting.
+        """
+        self.api_process: Optional[subprocess.Popen] = None
+        self.frontend_process: Optional[subprocess.Popen] = None
+        try:
+            print(f"🚀 Starting {self.config['fastapi_module']} on port {self.config['fastapi_port']}...")
+
             fastapi_cmd = [
                 sys.executable,
                 "-m",
@@ -42,44 +45,29 @@ class ServiceLauncher:
                 "--port",
                 str(self.config["fastapi_port"]),
             ]
-
             if self.config["auto_reload"]:
                 fastapi_cmd.append("--reload")
 
-            # Start FastAPI
-            # pyrefly: ignore  # implicitly-defined-attribute, no-matching-overload
             self.api_process = subprocess.Popen(fastapi_cmd)
-            print(
-                f"✅ FastAPI started on http://localhost:{self.config['fastapi_port']}"
-            )
+            print(f"✅ FastAPI started on http://localhost:{self.config['fastapi_port']}")
 
-            # Wait for FastAPI to initialize
-            # pyrefly: ignore  # bad-argument-type
             time.sleep(self.config["startup_delay"])
 
             print(f"🎨 Starting Streamlit from {self.config['streamlit_file']}...")
+            self.frontend_process = subprocess.Popen([
+                sys.executable,
+                "-m",
+                "streamlit",
+                "run",
+                self.config["streamlit_file"],
+                "--server.port",
+                str(self.config["streamlit_port"]),
+            ])
 
-            # Start Streamlit
-            # pyrefly: ignore  # implicitly-defined-attribute, no-matching-overload
-            self.frontend_process = subprocess.Popen(
-                [
-                    sys.executable,
-                    "-m",
-                    "streamlit",
-                    "run",
-                    self.config["streamlit_file"],
-                    "--server.port",
-                    str(self.config["streamlit_port"]),
-                ]
-            )
-
-            print(
-                f"✅ Streamlit started on http://localhost:{self.config['streamlit_port']}"
-            )
+            print(f"✅ Streamlit started on http://localhost:{self.config['streamlit_port']}")
             print("\n🎉 Both services are running!")
             print("📖 Press Ctrl+C to stop all services")
 
-            # Wait for processes
             self.api_process.wait()
             self.frontend_process.wait()
 
@@ -89,31 +77,30 @@ class ServiceLauncher:
             print(f"❌ Error starting services: {e}")
             self.shutdown_services()
 
-    def shutdown_services(self):
-        """Gracefully shutdown both services"""
-        print("\n🛑 Shutting down services...")
 
+    def shutdown_services(self) -> None:
+        """
+        Gracefully shutdown both FastAPI and Streamlit services.
+        """
+        print("\n🛑 Shutting down services...")
         try:
-            if hasattr(self, "api_process"):
+            if hasattr(self, "api_process") and self.api_process:
                 self.api_process.terminate()
                 print("✅ FastAPI stopped")
         except Exception:
             pass
-
         try:
-            if hasattr(self, "frontend_process"):
+            if hasattr(self, "frontend_process") and self.frontend_process:
                 self.frontend_process.terminate()
                 print("✅ Streamlit stopped")
         except Exception:
             pass
-
         print("👋 All services stopped successfully!")
 
 
-# Example usage configurations for different projects:
 
-# Configuration 1: Default (current project)
-DEFAULT_CONFIG = {
+# Example usage configurations for different projects:
+DEFAULT_CONFIG: Dict[str, Any] = {
     "fastapi_module": "app.main:app",
     "fastapi_port": 8000,
     "streamlit_file": "frontend/streamlit_app.py",
@@ -121,8 +108,7 @@ DEFAULT_CONFIG = {
     "startup_delay": 3,
 }
 
-# Configuration 2: Different structure
-CUSTOM_CONFIG = {
+CUSTOM_CONFIG: Dict[str, Any] = {
     "fastapi_module": "backend.server:app",
     "fastapi_port": 8080,
     "streamlit_file": "ui/dashboard.py",
@@ -130,8 +116,7 @@ CUSTOM_CONFIG = {
     "startup_delay": 5,
 }
 
-# Configuration 3: Simple structure
-SIMPLE_CONFIG = {
+SIMPLE_CONFIG: Dict[str, Any] = {
     "fastapi_module": "main:app",
     "fastapi_port": 3000,
     "streamlit_file": "app.py",
@@ -141,9 +126,11 @@ SIMPLE_CONFIG = {
 }
 
 
-def main():
-    """Main function - customize as needed"""
-    # Choose configuration based on your project
+
+def main() -> None:
+    """
+    Main function to launch services. Customize as needed.
+    """
     launcher = ServiceLauncher(DEFAULT_CONFIG)
     launcher.start_services()
 

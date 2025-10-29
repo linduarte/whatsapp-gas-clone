@@ -1,12 +1,19 @@
-# start.py
+
+"""
+Start both FastAPI backend and Streamlit frontend for WhatsApp Gas Consumption Automation.
+"""
 import subprocess
 import sys
 import time
+from typing import Optional
 
-
-def start_services():
-    api_process = None
-    frontend_process = None
+def start_services() -> None:
+    """
+    Launch FastAPI backend and Streamlit frontend as subprocesses.
+    Handles graceful shutdown and cleanup on exit.
+    """
+    api_process: Optional[subprocess.Popen] = None
+    frontend_process: Optional[subprocess.Popen] = None
     try:
         # Start FastAPI
         api_process = subprocess.Popen(
@@ -18,7 +25,8 @@ def start_services():
                 "--reload",
                 "--port",
                 "8000",
-            ]
+            ],
+            stdout=None, stderr=None
         )
 
         print("🚀 FastAPI started on http://localhost:8000")
@@ -34,7 +42,8 @@ def start_services():
                 "frontend/streamlit_app.py",
                 "--server.port",
                 "8501",
-            ]
+            ],
+            stdout=None, stderr=None
         )
 
         print("🎨 Streamlit started on http://localhost:8501")
@@ -54,7 +63,6 @@ def start_services():
                         proc.terminate()
                 except Exception:
                     pass
-
 
 if __name__ == "__main__":
     start_services()
