@@ -7,39 +7,23 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, WebDriverException
 import asyncio
-import os
 from datetime import datetime
 
 from typing import Optional
 from multiprocessing.synchronize import Event as MpEvent
 
 
+
 def get_dynamic_chrome_profile_path() -> Optional[str]:
-    """Get the Chrome profile path for the current user dynamically."""
-    username = os.getenv("USERNAME")
-    if not username:
-        print(
-            "[WARN] USERNAME environment variable not found. Using 'Admin' as fallback."
-        )
-        username = "Admin"
-    default_path = f"C:/Users/{username}/AppData/Local/Google/Chrome/User Data"
-    if os.path.exists(default_path):
-        print(f"[INFO] Using Chrome profile path: {default_path}")
-        return default_path
-    print(f"[WARN] Default Chrome profile path not found: {default_path}")
+    # Deprecated: Always use fresh profile for automation
     return None
 
 
 def create_chrome_driver() -> webdriver.Chrome:
     """Create Chrome WebDriver with robust configuration and fallback."""
     options = webdriver.ChromeOptions()
-    profile_path = get_dynamic_chrome_profile_path()
-    used_fresh_profile = False
-    if profile_path:
-        options.add_argument(f"--user-data-dir={profile_path}")
-    else:
-        print("[WARN] Falling back to fresh Chrome profile (no user-data-dir)")
-        used_fresh_profile = True
+    # Always use a fresh profile for automation
+    print("[INFO] Using fresh Chrome profile (no user-data-dir)")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-blink-features=AutomationControlled")
@@ -48,10 +32,7 @@ def create_chrome_driver() -> webdriver.Chrome:
     # Do NOT use headless for WhatsApp Web
     try:
         print("🔧 Attempting to create Chrome driver...")
-        if profile_path:
-            print(f"📁 Using profile: {profile_path}")
-        else:
-            print("📁 Using fresh Chrome profile")
+        print("📁 Using fresh Chrome profile")
         driver = webdriver.Chrome(options=options)
         print("✅ Chrome driver created successfully")
         driver.execute_script(
@@ -63,23 +44,6 @@ def create_chrome_driver() -> webdriver.Chrome:
         print(f"❌ Error initializing WebDriver: {e}")
         print("💡 Make sure ChromeDriver is installed and matches your Chrome version!")
         print("💡 Download from: https://chromedriver.chromium.org/downloads")
-        if not used_fresh_profile:
-            print("[INFO] Retrying with a fresh Chrome profile...")
-            try:
-                options = webdriver.ChromeOptions()
-                options.add_argument("--no-sandbox")
-                options.add_argument("--disable-dev-shm-usage")
-                options.add_argument("--disable-blink-features=AutomationControlled")
-                options.add_experimental_option("excludeSwitches", ["enable-automation"])
-                options.add_experimental_option("useAutomationExtension", False)
-                driver = webdriver.Chrome(options=options)
-                print("✅ Chrome driver created with fresh profile")
-                driver.execute_script(
-                    "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
-                )
-                return driver
-            except Exception as e2:
-                print(f"❌ Failed to create Chrome driver with fresh profile: {e2}")
         raise
     except Exception as e:
         print(f"❌ Unexpected error creating Chrome driver: {e}")
