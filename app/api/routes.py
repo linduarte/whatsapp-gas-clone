@@ -1,16 +1,18 @@
-
 """
 API routes for WhatsApp Gas Consumption FastAPI backend.
 """
-from fastapi import APIRouter, HTTPException, Query, UploadFile, File
-from pydantic import BaseModel
-from typing import Any, Dict
+
 import json
 import os
-import pandas as pd
-from app.services.whatsapp_service import WhatsAppService
+from typing import Any, Dict
+
+import pandas as pd  # type: ignore
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile
+from pydantic import BaseModel
+
 from app.services.excel_service import ExcelService
 from app.services.json_utils import format_message_with_styles
+from app.services.whatsapp_service import WhatsAppService
 
 router = APIRouter()
 
@@ -18,18 +20,21 @@ router = APIRouter()
 # Data models for API requests
 class WhatsAppRequest(BaseModel):
     """Request model for sending a WhatsApp message."""
+
     phone_number: str
     message: str
 
 
 class MessageFormatRequest(BaseModel):
     """Request model for formatting a WhatsApp message from data."""
+
     target_date: str
     data: list
 
 
 @router.get("/health")
 async def health_check() -> Dict[str, str]:
+    """Return the health status of the WhatsApp Gas API service."""
     return {"status": "healthy", "service": "WhatsApp Gas API"}
 
 
@@ -68,9 +73,9 @@ async def test_whatsapp_simple(
             "whatsapp_result": result,
         }
 
-    except Exception as e:
+    except (ValueError, TypeError, OSError, RuntimeError) as e:
         print(f"Error in WhatsApp test: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @router.post("/test-main-json-from-existing")
@@ -106,7 +111,7 @@ async def test_main_json_from_existing(
             )
             print(f"Data entries: {len(json_data.get('data', []))}")
 
-        except Exception as file_error:
+        except (json.JSONDecodeError, FileNotFoundError, OSError) as file_error:
             return {
                 "status": "error",
                 "message": f"Error reading JSON file: {str(file_error)}",
@@ -115,9 +120,6 @@ async def test_main_json_from_existing(
 
         # Step 2: Process data with pandas
         try:
-            import pandas as pd
-            from app.services.json_utils import format_message_with_styles
-
             # Convert to DataFrame for processing
             df = pd.DataFrame(json_data.get("data", []))
             target_date = json_data.get("target_date", "Data desconhecida")
@@ -129,7 +131,7 @@ async def test_main_json_from_existing(
                     f"First row sample: {df.iloc[0].to_dict() if len(df) > 0 else 'No data'}"
                 )
 
-        except Exception as df_error:
+        except (ValueError, TypeError, pd.errors.EmptyDataError) as df_error:
             return {
                 "status": "error",
                 "message": f"Error processing DataFrame: {str(df_error)}",
@@ -143,7 +145,7 @@ async def test_main_json_from_existing(
                 f"Message formatted successfully. Length: {len(formatted_message)} chars"
             )
 
-        except Exception as format_error:
+        except (ValueError, TypeError, RuntimeError) as format_error:
             return {
                 "status": "error",
                 "message": f"Error formatting message: {str(format_error)}",
@@ -167,7 +169,7 @@ async def test_main_json_from_existing(
                 "whatsapp_result": result,
             }
 
-        except Exception as whatsapp_error:
+        except (ValueError, TypeError, RuntimeError) as whatsapp_error:
             return {
                 "status": "error",
                 "message": f"Error sending WhatsApp: {str(whatsapp_error)}",
@@ -176,9 +178,11 @@ async def test_main_json_from_existing(
                 "message_formatting": "successful",
             }
 
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"Error in full test_main_json workflow: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @router.post("/upload-excel")
@@ -197,36 +201,44 @@ async def upload_excel(
         if target_month:
             print(f"Filtering for month: {target_month}")
 
-
-        # Check file type
         filename = file.filename if file.filename else ""
-        if not filename or not isinstance(filename, str) or not filename.endswith((".xlsx", ".xls")):
+        if (
+            not filename
+            or not isinstance(filename, str)
+            or not filename.endswith((".xlsx", ".xls"))
+        ):
             raise HTTPException(
                 status_code=400, detail="Only Excel files (.xlsx, .xls) are allowed"
             )
 
-        # Read file content
         contents = await file.read()
-
 
         # Process with ExcelService
         excel_service = ExcelService()
         try:
-            result = excel_service.process_excel_content(
-                contents, str(filename), target_month
+            # O serviço do GitHub não aceita a string da aba como segundo parâmetro posicional
+            resultado_excel = excel_service.process_excel_content(
+                contents, target_month=target_month
             )
+            # Como essa versão do GitHub já retorna um dicionário pronto, extraímos a lista:
+            lista_dados = resultado_excel.get("data", [])
         except Exception as e:
             print(f"ExcelService error: {e}")
-            raise HTTPException(status_code=400, detail=f"Excel processing error: {e}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Excel processing error: {e}",
+            ) from e
 
-        print(f"Excel processed successfully. Data entries: {len(result.get('data', []))}")
-        return result
+        print(f"Excel processed successfully. Data entries: {len(lista_dados)}")
+
+        # Envelopamos em um dicionário com a chave "data" para o frontend ler sem quebrar
+        return {"data": lista_dados}
 
     except HTTPException:
         raise
     except Exception as e:
         print(f"Error processing Excel file: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @router.post("/format-message")
@@ -252,7 +264,7 @@ async def format_message(request: MessageFormatRequest) -> Dict[str, Any]:
 
     except Exception as e:
         print(f"Error formatting message: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @router.post("/send-whatsapp")
@@ -284,7 +296,7 @@ async def send_whatsapp(request: WhatsAppRequest) -> Dict[str, Any]:
 
     except Exception as e:
         print(f"Error sending WhatsApp: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @router.post("/get-available-months")
@@ -297,7 +309,11 @@ async def get_available_months(file: UploadFile = File(...)) -> Dict[str, Any]:
 
         # Check file type
         filename = file.filename if file.filename else ""
-        if not filename or not isinstance(filename, str) or not filename.endswith((".xlsx", ".xls")):
+        if (
+            not filename
+            or not isinstance(filename, str)
+            or not filename.endswith((".xlsx", ".xls"))
+        ):
             raise HTTPException(
                 status_code=400, detail="Only Excel files (.xlsx, .xls) are allowed"
             )
@@ -307,26 +323,39 @@ async def get_available_months(file: UploadFile = File(...)) -> Dict[str, Any]:
 
         # Process with ExcelService to get all data
         excel_service = ExcelService()
-        result = excel_service.process_excel_content(
-            contents, str(filename), target_month=None
-        )
+        result = excel_service.process_excel_content(contents)
+
+        # Normalize result into a list of records
+        if isinstance(result, dict):
+            data_records = result.get("data", []) or []
+        elif isinstance(result, list):
+            data_records = result
+        elif isinstance(result, tuple):
+            if len(result) == 2 and isinstance(result[0], list):
+                data_records = result[0]
+            else:
+                data_records = list(result)
+        elif hasattr(result, "to_dict"):
+            try:
+                data_records = result.to_dict(orient="records") or []
+            except (AttributeError, TypeError, ValueError):
+                data_records = []
+        else:
+            data_records = []
 
         # Extract unique months from the data
         available_months = set()
-        for item in result.get("data", []):
+        for item in data_records:
             data_leitura = ""
             if isinstance(item, dict):
                 data_leitura = item.get("data_leitura", "")
-            if data_leitura and "/" in data_leitura:
-                try:
-                    # Parse date DD/MM/YYYY
-                    parts = data_leitura.split("/")
-                    if len(parts) == 3:
-                        month = parts[1]
-                        year = parts[2]
-                        available_months.add(f"{month}/{year}")
-                except Exception:
-                    continue
+            if isinstance(data_leitura, str) and "/" in data_leitura:
+                # Parse date DD/MM/YYYY
+                parts = data_leitura.split("/")
+                if len(parts) == 3:
+                    month = parts[1]
+                    year = parts[2]
+                    available_months.add(f"{month}/{year}")
 
         months_list = sorted(list(available_months))
         print(f"Available months: {months_list}")
@@ -334,9 +363,11 @@ async def get_available_months(file: UploadFile = File(...)) -> Dict[str, Any]:
         return {
             "status": "success",
             "available_months": months_list,
-            "total_records": len(result.get("data", [])),
+            "total_records": len(data_records),
         }
 
     except Exception as e:
+        if isinstance(e, HTTPException):
+            raise
         print(f"Error getting available months: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e

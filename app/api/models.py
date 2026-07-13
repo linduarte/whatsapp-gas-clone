@@ -2,8 +2,9 @@
 """
 Pydantic models for WhatsApp Gas Consumption API.
 """
-from pydantic import BaseModel
 from typing import List, Optional
+
+from pydantic import BaseModel
 
 
 class GasConsumptionData(BaseModel):
