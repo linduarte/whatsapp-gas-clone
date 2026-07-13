@@ -1,27 +1,66 @@
+"""excel_services.py"""
 
-import pandas as pd
 import io
+from datetime import datetime
 from typing import Optional
 
+import pandas as pd  # type: ignore
 
 
+class ExcelService:  # pylint: disable=too-few-public-methods
+    """Service for processing gas Excel files in the WhatsApp gas clone app."""
 
+    def __init__(self) -> None:
+        """Initialize the Excel service."""
+        return None
 
-class ExcelService:
-    def process_excel_content(self, content: bytes, filename: str, target_month: Optional[str] = None) -> dict:
+    def process_excel_content(
+        self, content: bytes, target_month: Optional[str] = None
+    ) -> dict:
         """
         Process Excel file content and return formatted data.
 
         Args:
             content (bytes): Excel file content in bytes.
-            filename (str): Name of the uploaded file.
-            target_month (str, optional): Month filter (e.g., "01/2025", "02/2025").
+            target_month (str, optional): Month filter (e.g., "01/2026", "02/2026").
 
         Returns:
             dict: {"target_date": str, "data": list}
         """
         try:
-            excel_data = pd.read_excel(io.BytesIO(content), sheet_name="Gas_2025", header=0)
+            # 1. Abre o arquivo temporariamente para espiar as abas disponíveis
+            content_io = io.BytesIO(content)
+            xl = pd.ExcelFile(content_io, engine="openpyxl")
+            abas_disponiveis = xl.sheet_names
+
+            # 2. Define o ano corrente do sistema como alvo padrão (Ex: 2026)
+            ano_alvo = str(datetime.now().year)
+
+            # 3. Se o usuário passou um filtro de mês/ano, extrai o ano escolhido
+            if target_month and "/" in target_month:
+                try:
+                    ano_alvo = target_month.split("/")[-1].strip()
+                except IndexError:
+                    pass
+
+            # 4. Monta o nome dinâmico esperado para a aba
+            aba_esperada = f"Gas_{ano_alvo}"
+
+            # 5. Fallback de Segurança: Se a aba calculada não existir, usa a primeira disponível
+            if aba_esperada in abas_disponiveis:
+                aba_final = aba_esperada
+            else:
+                # Ensure aba_final is always a string (sheet names can sometimes be non-str)
+                aba_final = str(abas_disponiveis[0]) if abas_disponiveis else "Sheet1"
+                print(f"⚠️ Aba '{aba_esperada}' não encontrada. Utilizando fallback: '{aba_final}'")
+
+            print(f"📂 Abrindo dinamicamente a aba do Excel: {aba_final}")
+
+            # 6. Carrega os dados da aba definida
+            content_io.seek(0)
+            excel_data = pd.read_excel(
+                content_io, sheet_name=aba_final, header=0
+            )
             print(f"Raw Excel data shape: {excel_data.shape}")
             print(f"Columns: {list(excel_data.columns)}")
             print(f"First few rows:\n{excel_data.head()}")
@@ -48,15 +87,21 @@ class ExcelService:
                     item = {
                         "data_leitura": data_leitura,
                         "apartamento": apartamento,
-                        "leitura_atual": self._safe_float_convert(row.get("Leitura atual", 0)),
-                        "consumo_m3": self._safe_float_convert(row.get("Consumo(m³)", 0)),
+                        "leitura_atual": self._safe_float_convert(
+                            row.get("Leitura atual", 0)
+                        ),
+                        "consumo_m3": self._safe_float_convert(
+                            row.get("Consumo(m³)", 0)
+                        ),
                         "calculo": self._safe_float_convert(row.get("Cálculo", 0)),
-                        "valor_final_rs": round(self._safe_float_convert(row.get("Valor final(R$)", 0)), 2),
+                        "valor_final_rs": round(
+                            self._safe_float_convert(row.get("Valor final(R$)", 0)), 2
+                        ),
                     }
                     gas_data.append(item)
-                    if not target_date and item["data_leitura"]:
-                        target_date = str(item["data_leitura"])
-                except Exception as row_error:
+                    if not target_date and data_leitura:
+                        target_date = data_leitura
+                except (TypeError, ValueError) as row_error:
                     print(f"Skipping row {index} due to error: {row_error}")
                     continue
 
@@ -65,12 +110,27 @@ class ExcelService:
 
             return {"target_date": target_date or "Data desconhecida", "data": gas_data}
 
-        except Exception as e:
+        except (
+            ValueError,
+            OSError,
+            pd.errors.EmptyDataError,
+            pd.errors.ParserError,
+        ) as e:
             match e:
+                case pd.errors.EmptyDataError() as ee:
+                    raise ValueError(
+                        f"Empty data error processing Excel file: {ee}"
+                    ) from ee
+                case pd.errors.ParserError() as pe:
+                    raise ValueError(
+                        f"Parser error processing Excel file: {pe}"
+                    ) from pe
                 case ValueError() as ve:
-                    raise Exception(f"Value error processing Excel file: {ve}")
+                    raise ValueError(f"Value error processing Excel file: {ve}") from ve
+                case OSError() as oe:
+                    raise OSError(f"OS error processing Excel file: {oe}") from oe
                 case _:
-                    raise Exception(f"Error processing Excel file: {e}")
+                    raise ValueError(f"Error processing Excel file: {e}") from e
 
     def _safe_float_convert(self, value) -> float:
         """
@@ -91,7 +151,6 @@ class ExcelService:
             except ValueError:
                 print(f"Warning: Could not convert '{value}' to float, using 0.0")
                 return 0.0
-        # For any other type, return 0.0 to ensure float return type
         return 0.0
 
     def _format_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -105,13 +164,15 @@ class ExcelService:
 
         if "Data Leitura" in df.columns:
             try:
-                # Convert to datetime, but only if the column is not already datetime
                 if not pd.api.types.is_datetime64_any_dtype(df["Data Leitura"]):
-                    df["Data Leitura"] = pd.to_datetime(df["Data Leitura"], format="%d/%m/%Y", errors="coerce")
-                # Only use .dt on Series, not on scalars
+                    df["Data Leitura"] = pd.to_datetime(
+                        df["Data Leitura"], format="%d/%m/%Y", errors="coerce"
+                    )
                 if isinstance(df["Data Leitura"], pd.Series):
-                    df["Data Leitura"] = df["Data Leitura"].apply(lambda x: x.strftime("%d/%m/%Y") if pd.notnull(x) else "")
-            except Exception as e:
+                    df["Data Leitura"] = df["Data Leitura"].apply(
+                        lambda x: x.strftime("%d/%m/%Y") if pd.notnull(x) else ""
+                    )
+            except (ValueError, TypeError) as e:
                 print(f"Warning: Error formatting date column: {e}")
 
         numeric_columns = ["Leitura atual", "Consumo(m³)", "Cálculo", "Valor final(R$)"]
@@ -124,7 +185,7 @@ class ExcelService:
                         df[col] = df[col].round(2)
                     else:
                         df[col] = df[col].round(4)
-                except Exception as e:
+                except (ValueError, TypeError) as e:
                     print(f"Warning: Error formatting column {col}: {e}")
                     df[col] = 0
         return df
@@ -132,13 +193,6 @@ class ExcelService:
     def _filter_by_month(self, df: pd.DataFrame, target_month: str) -> pd.DataFrame:
         """
         Filter dataframe by specific month.
-
-        Args:
-            df (pd.DataFrame): DataFrame with formatted data.
-            target_month (str): Month to filter (e.g., "01/2025", "02/2025").
-
-        Returns:
-            pd.DataFrame: Filtered DataFrame.
         """
         if "Data Leitura" not in df.columns:
             print("Warning: No 'Data Leitura' column found for month filtering.")
@@ -148,39 +202,53 @@ class ExcelService:
                 month, year = target_month.split("/")
             else:
                 month = target_month.zfill(2)
-                year = "2025"
+                year = str(datetime.now().year)
+                
             print(f"Filtering for month: {month}/{year}")
             filtered_df = df.copy()
-            # Convert to datetime for filtering, robustly
-            filtered_df["Data_Leitura_Date"] = pd.to_datetime(filtered_df["Data Leitura"], format="%d/%m/%Y", errors="coerce")
-            # Only use .dt if the column is a Series of datetime
+            
+            filtered_df["Data_Leitura_Date"] = pd.to_datetime(
+                filtered_df["Data Leitura"], format="%d/%m/%Y", errors="coerce"
+            )
+            
             date_col = filtered_df["Data_Leitura_Date"]
-            if isinstance(date_col, pd.Series) and pd.api.types.is_datetime64_any_dtype(date_col):
-                mask = (
-                    (date_col.dt.month == int(month)) &
-                    (date_col.dt.year == int(year))
+            if isinstance(date_col, pd.Series) and pd.api.types.is_datetime64_any_dtype(
+                date_col
+            ):
+                mask = (date_col.dt.month == int(month)) & (
+                    date_col.dt.year == int(year)
                 )
                 result_df = filtered_df.loc[mask].copy()
             elif isinstance(date_col, pd.Timestamp):
-                # Single row DataFrame, handle as scalar
-                if pd.notnull(date_col) and date_col.month == int(month) and date_col.year == int(year):
+                if (
+                    pd.notnull(date_col)
+                    and date_col.month == int(month)
+                    and date_col.year == int(year)
+                ):
                     result_df = filtered_df.copy()
                 else:
-                    result_df = filtered_df.iloc[0:0].copy()  # Empty DataFrame
+                    result_df = filtered_df.iloc[0:0].copy()
             else:
-                print("Warning: 'Data_Leitura_Date' is not datetime64, skipping month filter.")
+                print(
+                    "Warning: 'Data_Leitura_Date' is not datetime64, skipping month filter."
+                )
                 result_df = filtered_df.copy()
+                
             if "Data_Leitura_Date" in result_df.columns:
                 result_df = result_df.drop("Data_Leitura_Date", axis=1)
+                
             print(f"Found {len(result_df)} records for {month}/{year}")
             if len(result_df) == 0:
                 available_dates = filtered_df["Data Leitura"].dropna().unique()
-                print(f"No data found for {month}/{year}. Available dates: {list(available_dates)[:10]}...")
+                print(
+                    f"No data found for {month}/{year}. Available dates: {list(available_dates)[:10]}..."
+                )
             return result_df
-        except Exception as e:
+        except (ValueError, TypeError) as e:
             match e:
                 case ValueError() as ve:
                     print(f"Value error filtering by month: {ve}")
-                case _:
-                    print(f"Error filtering by month: {e}")
+                case TypeError() as te:
+                    print(f"Type error filtering by month: {te}")
             return df
+        
