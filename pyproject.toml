@@ -22,3 +22,9 @@ dependencies = [
 [tool.pyrefly]
 project-includes = ["**/*"]
 project-excludes = ['**/*venv/**\*']
+
+[dependency-groups]
+dev = [
+    "pandas-stubs>=3.0.3.260530",
+    "types-requests>=2.33.0.20260712",
+]
