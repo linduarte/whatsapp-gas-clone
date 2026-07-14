@@ -243,3 +243,6 @@ reports/
 notes.md
 TODO.md
 personal/
+
+# json
+app/services/playwright_whatsapp_session.json
