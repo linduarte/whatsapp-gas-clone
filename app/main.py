@@ -1,5 +1,3 @@
-# app/main.py
-
 """
 Main entry point for the WhatsApp Gas Consumption API (FastAPI).
 """
