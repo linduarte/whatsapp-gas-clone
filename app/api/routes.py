@@ -2,8 +2,10 @@
 API routes for WhatsApp Gas Consumption FastAPI backend.
 """
 
-import json
-import os
+import asyncio
+import platform
+import threading
+from concurrent.futures import Future
 from typing import Any, Dict
 
 import pandas as pd  # type: ignore
@@ -12,12 +14,12 @@ from pydantic import BaseModel
 
 from app.services.excel_service import ExcelService
 from app.services.json_utils import format_message_with_styles
-from app.services.whatsapp_service import WhatsAppService
+from app.services.whatsapp_automation import send_whatsapp_with_playwright
 
 router = APIRouter()
 
 
-# Data models for API requests
+# Modelos Pydantic consistentes com o contrato de dados
 class WhatsAppRequest(BaseModel):
     """Request model for sending a WhatsApp message."""
 
@@ -32,164 +34,93 @@ class MessageFormatRequest(BaseModel):
     data: list
 
 
+class WhatsAppResponse(BaseModel):
+    """Response model for WhatsApp automation status."""
+
+    status: str
+    message: str
+
+
 @router.get("/health")
 async def health_check() -> Dict[str, str]:
     """Return the health status of the WhatsApp Gas API service."""
     return {"status": "healthy", "service": "WhatsApp Gas API"}
 
 
-@router.post("/test-whatsapp-simple")
-async def test_whatsapp_simple(
-    phone_number: str = Query(
-        default="+5531988292853", description="Your phone number"
-    ),
-    message: str = Query(
-        default="Test message from FastAPI - No emojis!", description="Test message"
-    ),
-) -> Dict[str, Any]:
+@router.post("/send-whatsapp", response_model=WhatsAppResponse)
+async def send_whatsapp(request: WhatsAppRequest) -> WhatsAppResponse:
     """
-    Simple WhatsApp test - sends a basic message to test the automation
+    Send WhatsApp message using the stable Playwright automation engine.
+    Runs inside an isolated, dedicated background thread with a Proactor loop
+    to bypass Windows/Uvicorn event loop subprocess restrictions.
     """
     try:
-        print(f"Testing WhatsApp automation with phone: {phone_number}")
+        print(
+            f"🚀 [Backend] Iniciando disparo de WhatsApp para: {request.phone_number}"
+        )
 
-        # Clean the message to remove any problematic characters
-        clean_message = message.encode("ascii", "ignore").decode("ascii")
-        if not clean_message.strip():
-            clean_message = "Test message from FastAPI"
+        # threading, platform and Future are imported at module level
 
-        print(f"Original message: {message}")
-        print(f"Cleaned message: {clean_message}")
+        # Usamos uma Future para capturar o retorno da nossa thread isolada
+        future: Future[bool] = Future()
 
-        whatsapp_service = WhatsAppService()
-        result = await whatsapp_service.send_test_message(phone_number, clean_message)
+        def thread_target():
+            # Criamos um loop novinho e isolado para esta thread
+            # Criamos um loop novinho e isolado para esta thread
+            if platform.system() == "Windows":
+                # Evita classes obsoletas instanciando o loop diretamente
+                loop = asyncio.ProactorEventLoop()
+            else:
+                loop = asyncio.new_event_loop()
 
-        return {
-            "status": "success",
-            "message": "WhatsApp test completed",
-            "phone_number": phone_number,
-            "original_message": message,
-            "sent_message": clean_message,
-            "whatsapp_result": result,
-        }
-
-    except (ValueError, TypeError, OSError, RuntimeError) as e:
-        print(f"Error in WhatsApp test: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e)) from e
-
-
-@router.post("/test-main-json-from-existing")
-async def test_main_json_from_existing(
-    phone_number: str = Query(
-        default="+5531988292853", description="Your phone number"
-    ),
-) -> Dict[str, Any]:
-    """
-    Test using your existing output.json file with full WhatsApp automation
-    """
-    try:
-        print(f"Starting full JSON to WhatsApp workflow for phone: {phone_number}")
-
-        # Path to your existing output.json
-        file_path = r"D:\reposground\work\whatsapp_auto-gas\output.json"
-
-        # Check if file exists first
-        if not os.path.exists(file_path):
-            return {
-                "status": "error",
-                "message": f"File not found: {file_path}",
-                "phone_number": phone_number,
-            }
-
-        # Step 1: Read and parse JSON data
-        try:
-            with open(file_path, "r", encoding="utf-8") as json_file:
-                json_data = json.load(json_file)
-
-            print(
-                f"JSON loaded successfully. Target date: {json_data.get('target_date', 'unknown')}"
-            )
-            print(f"Data entries: {len(json_data.get('data', []))}")
-
-        except (json.JSONDecodeError, FileNotFoundError, OSError) as file_error:
-            return {
-                "status": "error",
-                "message": f"Error reading JSON file: {str(file_error)}",
-                "phone_number": phone_number,
-            }
-
-        # Step 2: Process data with pandas
-        try:
-            # Convert to DataFrame for processing
-            df = pd.DataFrame(json_data.get("data", []))
-            target_date = json_data.get("target_date", "Data desconhecida")
-
-            print(f"DataFrame created with {len(df)} rows")
-            if not df.empty:
-                print(f"DataFrame columns: {list(df.columns)}")
-                print(
-                    f"First row sample: {df.iloc[0].to_dict() if len(df) > 0 else 'No data'}"
+            asyncio.set_event_loop(loop)
+            try:
+                # Executa o Playwright de forma síncrona e segura dentro da thread
+                sucesso = loop.run_until_complete(
+                    send_whatsapp_with_playwright(
+                        phone=request.phone_number, message=request.message
+                    )
                 )
+                future.set_result(sucesso)
+            except Exception as thread_err:  # pylint: disable=broad-exception-caught
+                # Access any error raised during thread execution and propagate it
+                if isinstance(thread_err, (KeyboardInterrupt, SystemExit)):
+                    raise
+                future.set_exception(thread_err)
+            finally:
+                loop.close()
 
-        except (ValueError, TypeError, pd.errors.EmptyDataError) as df_error:
-            return {
-                "status": "error",
-                "message": f"Error processing DataFrame: {str(df_error)}",
-                "phone_number": phone_number,
-            }
+        # Dispara a execução em segundo plano
+        t = threading.Thread(target=thread_target)
+        t.start()
 
-        # Step 3: Format message
-        try:
-            formatted_message = await format_message_with_styles(df, target_date)
-            print(
-                f"Message formatted successfully. Length: {len(formatted_message)} chars"
+        # Aguarda a conclusão da thread de forma assíncrona sem travar o FastAPI
+        while t.is_alive():
+            await asyncio.sleep(0.2)
+
+        sucesso = future.result()
+
+        if sucesso:
+            return WhatsAppResponse(
+                status="success",
+                message="Mensagem enviada com sucesso pelo Playwright!",
+            )
+        else:
+            raise HTTPException(
+                status_code=500,
+                detail="A automação foi executada, mas não concluiu o envio.",
             )
 
-        except (ValueError, TypeError, RuntimeError) as format_error:
-            return {
-                "status": "error",
-                "message": f"Error formatting message: {str(format_error)}",
-                "phone_number": phone_number,
-            }
-
-        # Step 4: Send WhatsApp message
-        try:
-            whatsapp_service = WhatsAppService()
-            result = await whatsapp_service.send_message(
-                phone_number, formatted_message
-            )
-
-            return {
-                "status": "success",
-                "message": "Full WhatsApp workflow completed successfully",
-                "phone_number": phone_number,
-                "target_date": target_date,
-                "data_count": len(df),
-                "message_length": len(formatted_message),
-                "whatsapp_result": result,
-            }
-
-        except (ValueError, TypeError, RuntimeError) as whatsapp_error:
-            return {
-                "status": "error",
-                "message": f"Error sending WhatsApp: {str(whatsapp_error)}",
-                "phone_number": phone_number,
-                "data_processing": "successful",
-                "message_formatting": "successful",
-            }
-
-    except HTTPException:
-        raise
     except Exception as e:
-        print(f"Error in full test_main_json workflow: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e)) from e
+        print(f"❌ [Backend] Erro na rota send-whatsapp: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/upload-excel")
 async def upload_excel(
     file: UploadFile = File(...),
     target_month: str = Query(
-        None, description="Filter by month (e.g., '01/2025', '02/2025')"
+        None, description="Filter by month (e.g., '01/2026', '02/2026')"
     ),
 ) -> Dict[str, Any]:
     """
@@ -213,14 +144,12 @@ async def upload_excel(
 
         contents = await file.read()
 
-        # Process with ExcelService
+        # Process with the updated ExcelService
         excel_service = ExcelService()
         try:
-            # O serviço do GitHub não aceita a string da aba como segundo parâmetro posicional
             resultado_excel = excel_service.process_excel_content(
                 contents, target_month=target_month
             )
-            # Como essa versão do GitHub já retorna um dicionário pronto, extraímos a lista:
             lista_dados = resultado_excel.get("data", [])
         except Exception as e:
             print(f"ExcelService error: {e}")
@@ -230,8 +159,6 @@ async def upload_excel(
             ) from e
 
         print(f"Excel processed successfully. Data entries: {len(lista_dados)}")
-
-        # Envelopamos em um dicionário com a chave "data" para o frontend ler sem quebrar
         return {"data": lista_dados}
 
     except HTTPException:
@@ -244,7 +171,7 @@ async def upload_excel(
 @router.post("/format-message")
 async def format_message(request: MessageFormatRequest) -> Dict[str, Any]:
     """
-    Format gas consumption data into WhatsApp message
+    Format gas consumption data into WhatsApp message using normalized json_utils
     """
     try:
         print(f"Formatting message for date: {request.target_date}")
@@ -267,38 +194,6 @@ async def format_message(request: MessageFormatRequest) -> Dict[str, Any]:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
-@router.post("/send-whatsapp")
-async def send_whatsapp(request: WhatsAppRequest) -> Dict[str, Any]:
-    """
-    Send WhatsApp message
-    """
-    try:
-        print(f"Sending WhatsApp to: {request.phone_number}")
-
-        # Clean message to be ASCII-safe
-        clean_message = request.message.encode("ascii", "ignore").decode("ascii")
-        if not clean_message.strip():
-            raise HTTPException(
-                status_code=400, detail="Message is empty after cleaning"
-            )
-
-        whatsapp_service = WhatsAppService()
-        result = await whatsapp_service.send_message(
-            request.phone_number, clean_message
-        )
-
-        return {
-            "status": "success",
-            "message": "WhatsApp message sent successfully",
-            "phone_number": request.phone_number,
-            "whatsapp_result": result,
-        }
-
-    except Exception as e:
-        print(f"Error sending WhatsApp: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e)) from e
-
-
 @router.post("/get-available-months")
 async def get_available_months(file: UploadFile = File(...)) -> Dict[str, Any]:
     """
@@ -307,7 +202,6 @@ async def get_available_months(file: UploadFile = File(...)) -> Dict[str, Any]:
     try:
         print(f"Getting available months from: {file.filename}")
 
-        # Check file type
         filename = file.filename if file.filename else ""
         if (
             not filename
@@ -318,28 +212,13 @@ async def get_available_months(file: UploadFile = File(...)) -> Dict[str, Any]:
                 status_code=400, detail="Only Excel files (.xlsx, .xls) are allowed"
             )
 
-        # Read file content
         contents = await file.read()
 
-        # Process with ExcelService to get all data
         excel_service = ExcelService()
         result = excel_service.process_excel_content(contents)
 
-        # Normalize result into a list of records
         if isinstance(result, dict):
             data_records = result.get("data", []) or []
-        elif isinstance(result, list):
-            data_records = result
-        elif isinstance(result, tuple):
-            if len(result) == 2 and isinstance(result[0], list):
-                data_records = result[0]
-            else:
-                data_records = list(result)
-        elif hasattr(result, "to_dict"):
-            try:
-                data_records = result.to_dict(orient="records") or []
-            except (AttributeError, TypeError, ValueError):
-                data_records = []
         else:
             data_records = []
 
@@ -350,7 +229,6 @@ async def get_available_months(file: UploadFile = File(...)) -> Dict[str, Any]:
             if isinstance(item, dict):
                 data_leitura = item.get("data_leitura", "")
             if isinstance(data_leitura, str) and "/" in data_leitura:
-                # Parse date DD/MM/YYYY
                 parts = data_leitura.split("/")
                 if len(parts) == 3:
                     month = parts[1]
