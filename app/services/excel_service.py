@@ -84,6 +84,7 @@ class ExcelService:  # pylint: disable=too-few-public-methods
                     if not apartamento or apartamento.lower() == "apartamento":
                         continue
 
+                    # Forçamos as chaves a corresponderem exatamente ao modelo Pydantic esperado pelo FastAPI
                     item = {
                         "data_leitura": data_leitura,
                         "apartamento": apartamento,

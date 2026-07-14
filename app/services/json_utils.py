@@ -1,80 +1,24 @@
 """Utilities for extracting gas consumption data from JSON files and formatting messages."""
 
-import json
 import re
 from typing import Optional
 
-import pandas as pd  # type: ignore
-
-
-async def extract_gas_data(  # pylint: disable=too-many-arguments,too-many-positional-arguments
-    file_path: str,
-    _date_column: str,
-    apt_column: str,
-    last_lecture_column: str,
-    value_column: str,
-    target_date: str,
-) -> pd.DataFrame:
-    """Extract gas consumption data from a JSON file into a pandas DataFrame.
-
-    Args:
-        file_path: Path to the JSON file.
-        date_column: Name of the date column in the JSON data. (unused)
-        apt_column: Name of the apartment column in the JSON data.
-        last_lecture_column: Name of the current reading column in the JSON data.
-        value_column: Name of the value column in the JSON data.
-        target_date: Target date string for the extracted data.
-
-    Returns:
-        A pandas DataFrame created from the JSON file contents.
-    """
-    try:
-        _ = apt_column
-        _ = last_lecture_column
-        _ = value_column
-        _ = target_date
-        with open(file_path, "r", encoding="utf-8") as file:
-            data = json.load(file)
-
-        # Convert the list to a DataFrame
-        df = pd.DataFrame(data)
-
-        # Print the first few rows of the DataFrame for debugging
-        print("First few rows of the DataFrame:", df.head())
-
-        return df
-    except (FileNotFoundError, json.JSONDecodeError, OSError, ValueError) as e:
-        print(f"Error reading JSON file: {e}")
-        # Use isinstance checks instead of match/case to avoid unreachable pattern
-        if isinstance(e, json.JSONDecodeError):
-            print(f"JSON decode error: {e}")
-        elif isinstance(e, ValueError):
-            print(f"Value error reading JSON: {e}")
-        elif isinstance(e, FileNotFoundError):
-            print(f"File not found: {e}")
-        elif isinstance(e, OSError):
-            print(f"OS error reading JSON: {e}")
-        else:
-            print(f"Other error reading JSON: {e}")
-        return pd.DataFrame()  # Return an empty DataFrame on error
+import pandas as pd
 
 
 async def format_message_with_styles(data: pd.DataFrame, target_date: str) -> str:
-    """Format a DataFrame of gas consumption into a WhatsApp-styled message.
+    """Format dataframe records into a clean, structured WhatsApp message."""
+    print(f"DataFrame columns received by backend: {list(data.columns)}")
 
-    Normalizes column names, validates required columns, builds a styled
-    message for each apartment and removes emojis while preserving
-    accentuation.
-    """
-    # Normalize column names (strip, lower, replace spaces with underscores)
+    # Normaliza o nome das colunas eliminando espaços e aplicando letras minúsculas
     data = data.rename(columns=lambda x: x.strip().lower().replace(" ", "_"))
 
-    # Map expected names to normalized names - Tipagem explícita para calar o linter
+    # Como as chaves já vêm saneadas pelo Pydantic, o mapa fica direto e sem risco de erro
     col_map: dict[str, Optional[str]] = {
-        "apartamento": None,
-        "leitura_atual": None,
-        "consumo_m3": None,
-        "valor_final_rs": None,
+        "apartamento": "apartamento",
+        "leitura_atual": "leitura_atual",
+        "consumo_m3": "consumo_m3",
+        "valor_final_rs": "valor_final_rs",
     }
 
     for col in data.columns:
@@ -82,21 +26,21 @@ async def format_message_with_styles(data: pd.DataFrame, target_date: str) -> st
             if col == key:
                 col_map[key] = col
 
-    # Check for missing columns
+    # Validação rigorosa das colunas obrigatórias
     for key, val in col_map.items():
         if val is None:
             raise ValueError(
                 f"Missing expected column: '{key}' in DataFrame columns: {list(data.columns)}"
             )
 
-    # Header with bold formatting and introductory message
+    # Montagem do cabeçalho estruturado da mensagem
     message = (
         "🤖 Esta é uma mensagem automática do sistema de consumo de gás.\n\n"
-        f"*Consumo de gas e valor a pagar {target_date}*\n\n"
+        f"*Consumo de gás e valor a pagar - {target_date}*\n\n"
     )
 
+    # Varre as linhas remontando a string final com as máscaras visuais
     for _, row in data.iterrows():
-        # Extraímos os nomes das colunas validados de forma segura para o linter entender
         col_apt = col_map["apartamento"]
         col_leitura = col_map["leitura_atual"]
         col_consumo = col_map["consumo_m3"]
@@ -105,36 +49,46 @@ async def format_message_with_styles(data: pd.DataFrame, target_date: str) -> st
         if not (col_apt and col_leitura and col_consumo and col_valor):
             continue
 
-        # Usamos os mapeamentos validados para indexar a Series 'row'
-        _apt = str(row[col_apt]).encode("ascii", "ignore").decode("ascii")
-        _leitura = str(row[col_leitura]).encode("ascii", "ignore").decode("ascii")
-        _consumo = str(row[col_consumo]).encode("ascii", "ignore").decode("ascii")
+        apt = str(row[col_apt]).encode("ascii", "ignore").decode("ascii")
+        leitura = str(row[col_leitura]).encode("ascii", "ignore").decode("ascii")
+        consumo = str(row[col_consumo]).encode("ascii", "ignore").decode("ascii")
 
-        # Format valor_final_rs as 'R$ xx,yy'
+        # Tratamento e conversão da moeda nacional (R$ xx,yy)
         try:
             valor_float = float(row[col_valor])
-            _valor = (
+            valor = (
                 f"R$ {valor_float:,.2f}".replace(",", "X")
                 .replace(".", ",")
                 .replace("X", ".")
             )
         except (ValueError, TypeError):
-            _valor = str(row[col_valor])
+            valor = str(row[col_valor])
 
-    # Remove emojis, mas mantenha acentuação
+        # Incrementa o corpo do texto de forma incremental
+        message += f"🏠 Apartamento: *{apt}*\n"
+        message += f"📊 Leitura atual: {leitura}\n"
+        message += f"⚡ Consumo: _{consumo}_ m³\n"
+        message += f"💰 Valor final: *{valor}*\n"
+        message += f"{'─' * 25}\n\n"
+
+    message += f"_Relatório gerado em {target_date}_\n"
+    message += f"_Total de apartamentos: {len(data)}_"
+
+    # Função interna isolada para higienização de caracteres especiais de emojis
     def remove_emojis(text: str) -> str:
         emoji_pattern = re.compile(
             "["
-            "\U0001f600-\U0001f64f"  # emoticons
-            "\U0001f300-\U0001f5ff"  # symbols & pictographs
-            "\U0001f680-\U0001f6ff"  # transport & map symbols
-            "\U0001f1e0-\U0001f1ff"  # flags (iOS)
-            "\U00002700-\U000027bf"  # Dingbats
-            "\U000024c2-\U0001f251"
+            r"\U0001F600-\U0001F64F"  # emoticons
+            r"\U0001F300-\U0001F5FF"  # symbols & pictographs
+            r"\U0001F680-\U0001F6FF"  # transport & map symbols
+            r"\U0001F1E0-\U0001F1FF"  # flags (iOS)
+            r"\U00002700-\U000027BF"  # Dingbats
+            r"\U000024C2-\U0001F251"
             "]+",
             flags=re.UNICODE,
         )
         return emoji_pattern.sub(r"", text)
 
     clean_message = remove_emojis(message)
+    print(f"✅ Message formatted successfully. Total length: {len(clean_message)}")
     return clean_message
