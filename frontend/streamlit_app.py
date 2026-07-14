@@ -226,36 +226,32 @@ elif page == "📱 Send WhatsApp":
 
             if botao_disparo:
                 if phone:
-                    # Usamos um spinner visual do Streamlit para aguardar o backend
-                    with st.spinner(
-                        "🚀 Solicitando disparo ao servidor de automação..."
-                    ):
+                    # Limpa caracteres não numéricos do telefone (espaços, traços, parênteses)
+                    phone_clean = "".join(filter(str.isdigit, phone))
+                    
+                    # Se o usuário digitou 11 dígitos (ex: 31988292853), adiciona o código do Brasil (55)
+                    if len(phone_clean) == 11:
+                        phone_clean = f"55{phone_clean}"
+                        
+                    with st.spinner("🚀 Solicitando disparo ao servidor de automação..."):
                         try:
-                            # Fazemos a chamada HTTP síncrona simples para o backend
-                            # Ajuste a URL se o seu FastAPI rodar em outra porta (ex: http://127.0.0.1:8000)
-                            API_BASE = "http://127.0.0.1:8000/api/v1"
-
+                            api_base = "http://127.0.0.1:8000/api/v1"
+                            
                             send_response = requests.post(
-                                f"{API_BASE}/send-whatsapp",
+                                f"{api_base}/send-whatsapp",
                                 json={
-                                    "phone_number": phone,
+                                    "phone_number": phone_clean,  # Envia o número já formatado com 55
                                     "message": mensagem_final,
                                 },
-                                timeout=60,  # Tempo limite estendido para a abertura do navegador no backend
+                                timeout=300,  # 5 minutos
                             )
 
                             if send_response.status_code == 200:
-                                st.success(
-                                    "🎉 Processo concluído com sucesso! Relatório transmitido."
-                                )
+                                st.success("🎉 Processo concluído com sucesso! Relatório transmitido.")
                             else:
-                                st.error(
-                                    f"❌ Falha no servidor de automação: {send_response.text}"
-                                )
+                                st.error(f"❌ Falha no servidor de automação: {send_response.text}")
                         except requests.RequestException as req_err:
-                            st.error(
-                                f"❌ Erro de conexão com o backend: {str(req_err)}"
-                            )
+                            st.error(f"❌ Erro de conexão com o backend: {str(req_err)}")
                 else:
                     st.error("❌ Please enter a phone number.")
         except (KeyError, TypeError, ValueError) as e:
