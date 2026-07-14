@@ -1,12 +1,8 @@
 """frontend/streamlit_app.py"""
 
-import asyncio
-
-import pandas as pd  # type: ignore
+import pandas as pd  # type: ignore[import]
 import requests
 import streamlit as st
-
-from app.services.whatsapp_automation import send_whatsapp_with_playwright
 
 st.set_page_config(
     page_title="Gas Consumption Manager",
@@ -117,7 +113,7 @@ if page == "📊 Upload Data":
                             df["valor_final_rs"] = df["valor_final_rs"].apply(
                                 lambda x: f"{float(x):.2f}"
                             )
-                        st.dataframe(df, use_container_width=True)
+                        st.dataframe(df, width="stretch")
                     else:
                         st.warning("⚠️ No data found matching the filters.")
                 else:
@@ -146,7 +142,7 @@ elif page == "👀 Preview Data":
                 lambda x: f"{float(x):.2f}"
             )
 
-        st.dataframe(df_display, use_container_width=True)
+        st.dataframe(df_display, width="stretch")
 
         # Seção de Métricas Consolidadas (Conversão segura para Float)
         st.subheader("📈 Summary Statistics")
@@ -171,79 +167,102 @@ elif page == "📱 Send WhatsApp":
         st.header("📱 Send WhatsApp Message")
 
         try:
-            # Consome a rota do backend para buscar o template de mensagem estruturado
-            response = requests.post(
-                f"{API_BASE}/format-message",
-                json=st.session_state.gas_data,
-                timeout=15,
+            # Pegamos os dados que já foram validados e processados pelo upload
+            dados_lista = st.session_state.gas_data.get("data", [])
+            data_alvo = st.session_state.gas_data.get(
+                "target_date", st.session_state.selected_month_str
             )
 
-            if response.status_code == 200:
-                formatted_message = response.json().get("formatted_message", "")
+            # Montamos a mensagem diretamente no frontend, evitando erros 422 de API
+            message_lines = [
+                "🤖 Esta é uma mensagem automática do sistema de consumo de gás.\n",
+                f"*Consumo de gás e valor a pagar - {data_alvo}*\n",
+            ]
 
-                st.subheader("📝 Message Preview")
-                # Exibimos em text_area para revisão, mas liberado para pequenos ajustes manuais se você quiser
-                mensagem_final = st.text_area(
-                    "Message Editor", formatted_message, height=250
+            for item in dados_lista:
+                apt = str(item.get("apartamento", ""))
+                leitura = str(item.get("leitura_atual", ""))
+                consumo = str(item.get("consumo_m3", ""))
+
+                try:
+                    valor_float = float(item.get("valor_final_rs", 0))
+                    VALOR_STR = (
+                        f"R$ {valor_float:,.2f}".replace(",", "X")
+                        .replace(".", ",")
+                        .replace("X", ".")
+                    )
+                except (ValueError, TypeError):
+                    VALOR_STR = str(item.get("valor_final_rs", ""))
+
+                message_lines.append(f"🏠 Apartamento: *{apt}*")
+                message_lines.append(f"📊 Leitura atual: {leitura}")
+                message_lines.append(f"⚡ Consumo: _{consumo}_ m³")
+                message_lines.append(f"💰 Valor final: *{VALOR_STR}*")
+                message_lines.append(f"{'─' * 25}\n")
+
+            message_lines.append(f"_Relatório gerado em {data_alvo}_")
+            message_lines.append(f"_Total de apartamentos: {len(dados_lista)}_")
+            FORMATTED_MESSAGE = "\n".join(message_lines)
+
+            st.subheader("📝 Message Preview")
+            # Exibe a mensagem gerada localmente pronta para edição ou envio
+            mensagem_final = st.text_area(
+                "Message Editor", FORMATTED_MESSAGE, height=250
+            )
+
+            col_phone, col_btn = st.columns([2, 1])
+            with col_phone:
+                phone = st.text_input(
+                    "📞 Phone Number",
+                    placeholder="Ex: 31988887777",
+                    help="Insira o número com o DDD. O sistema ajustará o código do país automaticamente.",
                 )
 
-                col_phone, col_btn = st.columns([2, 1])
-                with col_phone:
-                    phone = st.text_input(
-                        "📞 Phone Number",
-                        placeholder="Ex: 31988887777",
-                        help="Insira o número com o DDD. O sistema ajustará o código do país automaticamente.",
-                    )
+            with col_btn:
+                st.markdown("<br>", unsafe_allow_html=True)
+                botao_disparo = st.button(
+                    "📤 Launch WhatsApp Automation", type="primary"
+                )
 
-                with col_btn:
-                    st.markdown(
-                        "<br>", unsafe_allow_html=True
-                    )  # Alinhamento vertical do botão com o input
-                    botao_disparo = st.button(
-                        "📤 Launch WhatsApp Automation", type="primary"
-                    )
+            if botao_disparo:
+                if phone:
+                    # Usamos um spinner visual do Streamlit para aguardar o backend
+                    with st.spinner(
+                        "🚀 Solicitando disparo ao servidor de automação..."
+                    ):
+                        try:
+                            # Fazemos a chamada HTTP síncrona simples para o backend
+                            # Ajuste a URL se o seu FastAPI rodar em outra porta (ex: http://127.0.0.1:8000)
+                            API_BASE = "http://127.0.0.1:8000/api/v1"
 
-                if botao_disparo:
-                    if phone and mensagem_final:
-                        # Cria uma caixa de feedback em tempo real controlada pelo Playwright
-                        status_logger = st.info("Iniciando motores da automação...")
-
-                        # Callback dinâmico para atualizar o Streamlit direto de dentro do loop assíncrono
-                        def log_callback(texto):
-                            """Callback to write status updates into the Streamlit status logger.
-
-                            Args:
-                                texto: Text to write to the status logger.
-                            """
-                            status_logger.write(f"🤖 {texto}")
-
-                        # Executa o loop assíncrono do Playwright de forma isolada e segura
-                        sucesso = asyncio.run(
-                            send_whatsapp_with_playwright(
-                                phone=phone,
-                                message=mensagem_final,
-                                status_callback=log_callback,
+                            send_response = requests.post(
+                                f"{API_BASE}/send-whatsapp",
+                                json={
+                                    "phone_number": phone,
+                                    "message": mensagem_final,
+                                },
+                                timeout=60,  # Tempo limite estendido para a abertura do navegador no backend
                             )
-                        )
 
-                        if sucesso:
-                            status_logger.success(
-                                "🎉 Processo concluído com sucesso! Relatório transmitido."
+                            if send_response.status_code == 200:
+                                st.success(
+                                    "🎉 Processo concluído com sucesso! Relatório transmitido."
+                                )
+                            else:
+                                st.error(
+                                    f"❌ Falha no servidor de automação: {send_response.text}"
+                                )
+                        except requests.RequestException as req_err:
+                            st.error(
+                                f"❌ Erro de conexão com o backend: {str(req_err)}"
                             )
-                        else:
-                            status_logger.error(
-                                "❌ Falha na automação. Verifique os logs no terminal para análise."
-                            )
-                    else:
-                        st.error("❌ Please enter a phone number and message.")
-            else:
-                st.error("❌ Error formatting message templates via Backend.")
-        except requests.RequestException as e:
-            st.error(f"❌ Network error while contacting backend: {str(e)}")
-        except ValueError as e:
-            st.error(f"❌ Invalid response content: {str(e)}")
+                else:
+                    st.error("❌ Please enter a phone number.")
+        except (KeyError, TypeError, ValueError) as e:
+            st.error(f"❌ Error generating message: {str(e)}")
     else:
         st.warning("⚠️ Please upload and preview data first!")
 
+# Footer - Fim definitivo do arquivo streamlit_app.py
 st.markdown("---")
-st.markdown("*WhatsApp Gas Consumption Manager v2.0 • Playwright Engine*")
+st.markdown("*WhatsApp Gas Consumption Manager v2.0 • Playwright Engine via API*")
