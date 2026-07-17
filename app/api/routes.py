@@ -59,13 +59,17 @@ async def send_whatsapp(request: WhatsAppRequest) -> WhatsAppResponse:
             f"🚀 [Backend] Iniciando disparo de WhatsApp para: {request.phone_number}"
         )
 
-        # threading, platform and Future are imported at module level
+        # Anexa a assinatura de encerramento automático logo após o bloco de dados enviado
+        mensagem_com_encerramento = (
+            f"{request.message}\n\n"
+            f"🤖 *Esta é uma mensagem automática de informe de consumo de gás. "
+            f"Por favor, não responda a este número.*"
+        )
 
         # Usamos uma Future para capturar o retorno da nossa thread isolada
         future: Future[bool] = Future()
 
         def thread_target():
-            # Criamos um loop novinho e isolado para esta thread
             # Criamos um loop novinho e isolado para esta thread
             if platform.system() == "Windows":
                 # Evita classes obsoletas instanciando o loop diretamente
@@ -74,20 +78,24 @@ async def send_whatsapp(request: WhatsAppRequest) -> WhatsAppResponse:
                 loop = asyncio.new_event_loop()
 
             asyncio.set_event_loop(loop)
-            try:
-                # Executa o Playwright de forma síncrona e segura dentro da thread
-                sucesso = loop.run_until_complete(
-                    send_whatsapp_with_playwright(
-                        phone=request.phone_number, message=request.message
-                    )
+            task = loop.create_task(
+                send_whatsapp_with_playwright(
+                    phone=request.phone_number, message=mensagem_com_encerramento
                 )
-                future.set_result(sucesso)
-            except Exception as thread_err:  # pylint: disable=broad-exception-caught
-                # Access any error raised during thread execution and propagate it
-                if isinstance(thread_err, (KeyboardInterrupt, SystemExit)):
-                    raise
-                future.set_exception(thread_err)
+            )
+            try:
+                loop.run_until_complete(task)
             finally:
+                if task.done():
+                    task_exc = task.exception()
+                    if task_exc is not None:
+                        future.set_exception(task_exc)
+                    else:
+                        future.set_result(task.result())
+                else:
+                    future.set_exception(
+                        RuntimeError("WhatsApp task terminated before completion")
+                    )
                 loop.close()
 
         # Dispara a execução em segundo plano
