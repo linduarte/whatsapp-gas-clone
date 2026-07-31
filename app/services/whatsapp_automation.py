@@ -50,12 +50,14 @@ async def send_whatsapp_with_playwright(phone: str, message: str) -> bool:
             chat_box = None
             for selector in text_box_selectors:
                 try:
-                    # Tenta encontrar cada seletor aguardando 10 segundos
-                    chat_box = await page.wait_for_selector(selector, timeout=10000)
+                    # Aguarda até 20s e aceita se o seletor estiver anexado ao DOM (state='attached')
+                    chat_box = await page.wait_for_selector(
+                        selector,
+                        timeout=20000,
+                        state="attached"
+                    )
                     if chat_box:
-                        print(
-                            f"PLAYWRIGHT 🎯 Campo localizado com o seletor: {selector}"
-                        )
+                        print(f"PLAYWRIGHT 🎯 Campo localizado com o seletor: {selector}")
                         break
                 except TimeoutError:
                     continue
