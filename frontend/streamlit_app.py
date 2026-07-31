@@ -213,11 +213,11 @@ elif page == "📱 Send WhatsApp":
             col_phone, col_btn = st.columns([2, 1])
             with col_phone:
                 phone = st.text_input(
-                    "📞 Phone Number",
-                    placeholder="Ex: 31988887777",
-                    help="Insira o número com o DDD. O sistema ajustará o código do país automaticamente.",
-                )
-
+                        "Número do WhatsApp (com DDD)",
+                        value="",
+                        placeholder="Ex: 5531999998888 (apenas números)",
+                        help="Insira o código do país (55) + DDD + Número sem espaços ou traços."
+                    )
             with col_btn:
                 st.markdown("<br>", unsafe_allow_html=True)
                 botao_disparo = st.button(
