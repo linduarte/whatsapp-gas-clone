@@ -81,16 +81,35 @@ async def send_whatsapp_with_playwright(phone: str, message: str) -> bool:
                 await browser.close()
                 return False
 
-            # Envia a mensagem
+            # Foca no campo de texto localizado
             await chat_box.focus()
-            await chat_box.fill(message)
-            await asyncio.sleep(1)
-            await chat_box.press("Enter")
 
-            print("PLAYWRIGHT 📤 Mensagem disparada com sucesso!")
-            await asyncio.sleep(4)
+            # 1. Garante caixa limpa e simula a digitação nativa do usuário
+            await chat_box.fill("")
+            await page.keyboard.insert_text(message)
+            await asyncio.sleep(1.5)  # Tempo para o React/DOM habilitar o botão de envio
 
-            # Salva a sessão para não precisar de QR Code no futuro
+            print("PLAYWRIGHT 📤 Disparando envio...")
+
+            # 2. Localiza e clica no botão oficial de enviar (setinha verde)
+            send_button_selector = "button span[data-icon='send']"
+            try:
+                send_button = await page.wait_for_selector(send_button_selector, timeout=3000)
+                if send_button:
+                    await send_button.click()
+                    print("PLAYWRIGHT 🟢 Clique no botão de enviar realizado!")
+                else:
+                    await chat_box.press("Enter")
+            except (asyncio.TimeoutError, PlaywrightError):
+                # Caso o botão visual não esteja acessível, força o envio pelo teclado
+                print("PLAYWRIGHT ⌨️ Enviando via tecla Enter...")
+                await chat_box.press("Enter")
+
+            # 3. Aguarda 5 segundos para processar o envio na rede antes de encerrar
+            print("PLAYWRIGHT ⏳ Aguardando confirmação de entrega na rede...")
+            await asyncio.sleep(5)
+
+            # Salva o estado da sessão autenticada para os próximos disparos
             await context.storage_state(path=session_file)
             await browser.close()
             return True
