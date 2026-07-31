@@ -5,7 +5,6 @@ Handles TargetClosedError gracefully if the page or browser is closed.
 
 import asyncio
 
-from playwright._impl._errors import TargetClosedError
 from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import async_playwright
 
@@ -96,7 +95,7 @@ async def send_whatsapp_with_playwright(phone: str, message: str) -> bool:
             await browser.close()
             return True
 
-        except (PlaywrightError, TargetClosedError, asyncio.TimeoutError) as err:
+        except (PlaywrightError, asyncio.TimeoutError) as err:
             print(f"PLAYWRIGHT ❌ Erro: {str(err)}")
             await browser.close()
             return False
