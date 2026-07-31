@@ -10,10 +10,10 @@ from playwright.async_api import async_playwright
 
 async def send_whatsapp_with_playwright(phone: str, message: str) -> bool:
     """
-    Automates sending WhatsApp messages using Playwright Chromium with stable flags.
+    Automates sending WhatsApp messages using Playwright.
+    Gives generous timeout for QR Code authentication before searching for text box.
     """
     async with async_playwright() as p:
-        # Args essenciais para estabilidade no Linux e Windows
         browser = await p.chromium.launch(
             headless=False,
             args=[
@@ -23,11 +23,10 @@ async def send_whatsapp_with_playwright(phone: str, message: str) -> bool:
             ],
         )
 
-        # Tenta utilizar o estado da sessão salva (cookies/localStorage)
         session_file = "playwright_whatsapp_session.json"
         try:
             context = await browser.new_context(storage_state=session_file)
-        except (FileNotFoundError, ValueError):
+        except FileNotFoundError:
             context = await browser.new_context()
 
         page = await context.new_page()
@@ -37,9 +36,21 @@ async def send_whatsapp_with_playwright(phone: str, message: str) -> bool:
             print(f"PLAYWRIGHT 🌐 Navegando para: {target_url}")
             await page.goto(target_url, wait_until="domcontentloaded")
 
-            print("PLAYWRIGHT ⏳ Aguardando liberação do campo de texto...")
+            # 🔑 PASSO 1: Aguarda o login / sincronização (QR Code) se necessário (até 90s)
+            print(
+                "PLAYWRIGHT 🔑 Verificando autenticação / QR Code... (Aguardando até 90s para você escanear se necessário)"
+            )
+            try:
+                # O painel lateral 'side' só surge quando o WhatsApp está logado!
+                await page.wait_for_selector("#side", timeout=90000)
+                print("PLAYWRIGHT ✅ Sessão autenticada e conectada com sucesso!")
+            except TimeoutError:
+                print("PLAYWRIGHT ❌ Tempo limite para escanear o QR Code expirou.")
+                await browser.close()
+                return False
 
-            # Lista de seletores em ordem de prioridade
+            # 🎯 PASSO 2: Agora que está logado, aguarda a caixa de texto do chat específico
+            print("PLAYWRIGHT ⏳ Aguardando liberação do campo de texto da conversa...")
             text_box_selectors = [
                 "div[contenteditable='true'][role='textbox']",
                 "div[contenteditable='true'][data-tab='10']",
@@ -50,38 +61,35 @@ async def send_whatsapp_with_playwright(phone: str, message: str) -> bool:
             chat_box = None
             for selector in text_box_selectors:
                 try:
-                    # Aguarda até 20s e aceita se o seletor estiver anexado ao DOM (state='attached')
                     chat_box = await page.wait_for_selector(
-                        selector,
-                        timeout=20000,
-                        state="attached"
+                        selector, timeout=15000, state="attached"
                     )
                     if chat_box:
-                        print(f"PLAYWRIGHT 🎯 Campo localizado com o seletor: {selector}")
+                        print(f"PLAYWRIGHT 🎯 Campo localizado via seletor: {selector}")
                         break
                 except TimeoutError:
                     continue
 
             if not chat_box:
-                print("PLAYWRIGHT ❌ Não foi possível encontrar o campo de mensagem.")
+                print("PLAYWRIGHT ❌ Campo de texto não encontrado após o login.")
                 await browser.close()
                 return False
 
-            # Foca, preenche a mensagem e dispara
+            # Digita e envia
             await chat_box.focus()
             await chat_box.fill(message)
-            await asyncio.sleep(1)  # Pausa tática para habilitar o envio
+            await asyncio.sleep(1)
             await chat_box.press("Enter")
 
             print("PLAYWRIGHT 📤 Mensagem disparada com sucesso!")
-            await asyncio.sleep(4)  # Garante o envio na rede antes de salvar sessão
+            await asyncio.sleep(4)
 
-            # Salva o estado atualizado da sessão para os próximos disparos
+            # Salva a sessão autenticada para NUNCA MAIS pedir QR Code
             await context.storage_state(path=session_file)
             await browser.close()
             return True
 
-        except (TimeoutError, OSError, ValueError) as err:
-            print(f"PLAYWRIGHT ❌ Erro na execução da automação: {str(err)}")
+        except (TimeoutError, ConnectionError, OSError) as err:
+            print(f"PLAYWRIGHT ❌ Erro durante a automação: {str(err)}")
             await browser.close()
             return False
