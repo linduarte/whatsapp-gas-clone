@@ -50,7 +50,6 @@ async def send_whatsapp_with_playwright(phone: str, message: str) -> bool:
                 "--disable-setuid-sandbox"
             ]
         )
-        
         user_agent = (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
             "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
@@ -75,19 +74,45 @@ async def send_whatsapp_with_playwright(phone: str, message: str) -> bool:
 
         try:
             target_url = f"https://web.whatsapp.com/send?phone={phone}"
-            print(f"PLAYWRIGHT 🌐 Navegando para: {target_url}")
-            await page.goto(target_url, wait_until="domcontentloaded")
+            print(f"PLAYWRIGHT 🌐 Navegando diretamente para o contato: {target_url}")
 
-            # Aguarda até 90s para login / QR Code
-            print("PLAYWRIGHT 🔑 Aguardando login / leitura do QR Code...")
+            # Aumenta o tempo limite de carregamento da página para 120s no Linux
+            await page.goto(target_url, wait_until="domcontentloaded", timeout=120000)
+
+            print("PLAYWRIGHT 🔑 Aguardando carregamento do WhatsApp / Leitura do QR Code...")
+
+            # Aguarda a interface principal carregar (com timeout estendido para o Linux)
             try:
-                await page.wait_for_selector("#side", timeout=90000)
-                print("PLAYWRIGHT ✅ Sessão conectada!")
-            except asyncio.TimeoutError:
-                print("PLAYWRIGHT ❌ Tempo limite para o QR Code expirou.")
+                await page.wait_for_selector("#side", timeout=120000)
+                print("PLAYWRIGHT ✅ Interface do WhatsApp Web carregada!")
+            except (asyncio.TimeoutError, PlaywrightError):
+                print("PLAYWRIGHT ❌ Tempo limite expirado aguardando interface.")
                 await browser.close()
                 return False
 
+            # Salva o estado da sessão IMEDIATAMENTE após a autenticação confirmada
+            await context.storage_state(path=str(session_file))
+            print("PLAYWRIGHT 💾 Estado da sessão armazenado no disco!")
+
+            # Espera até 30s para que a caixa de conversa específica do número seja aberta
+            print("PLAYWRIGHT ⏳ Aguardando abertura do chat do destinatário...")
+            chat_pronto = False
+            for _ in range(15):  # Tenta por até 30 segundos (15 x 2s)
+                try:
+                    # Verifica se a caixa de texto de digitação já está visível
+                    box = await page.wait_for_selector("div[contenteditable='true'][role='textbox']", timeout=2000)
+                    if box:
+                        chat_pronto = True
+                        break
+                except (asyncio.TimeoutError, PlaywrightError):
+                    await asyncio.sleep(2)
+
+            if not chat_pronto:
+                print("PLAYWRIGHT ⚠️ O chat do número não abriu a tempo. Verifique a conexão do celular.")
+                await browser.close()
+                return False
+
+            # ... segue para a execução do diálogo interativo (Passo 1, 2, 3...)
             # Função auxiliar interna para simular o diálogo cadenciado
             async def enviar_passo(texto: str, espera_segundos: float = 2.0) -> bool:
                 text_box_selectors = [
