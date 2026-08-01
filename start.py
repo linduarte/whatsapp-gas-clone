@@ -1,11 +1,12 @@
-
 """
 Start both FastAPI backend and Streamlit frontend for WhatsApp Gas Consumption Automation.
 """
+
 import subprocess
 import sys
 import time
 from typing import Optional
+
 
 def start_services() -> None:
     """
@@ -26,7 +27,8 @@ def start_services() -> None:
                 "--port",
                 "8000",
             ],
-            stdout=None, stderr=None
+            stdout=None,
+            stderr=None,
         )
 
         print("🚀 FastAPI started on http://localhost:8000")
@@ -43,7 +45,8 @@ def start_services() -> None:
                 "--server.port",
                 "8501",
             ],
-            stdout=None, stderr=None
+            stdout=None,
+            stderr=None,
         )
 
         print("🎨 Streamlit started on http://localhost:8501")
@@ -55,14 +58,14 @@ def start_services() -> None:
     except KeyboardInterrupt:
         print("\n🛑 Shutting down services...")
     finally:
-        # Terminate any started subprocesses
+        # Encerra os dois subprocessos ao fechar
         for proc in (api_process, frontend_process):
-            if proc is not None:
+            if proc is not None and proc.poll() is None:
                 try:
-                    if proc.poll() is None:
-                        proc.terminate()
-                except Exception:
-                    pass
+                    proc.terminate()
+                    proc.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
 
 if __name__ == "__main__":
     start_services()
